@@ -254,6 +254,12 @@ func getKubernetesDelegate(client *ClientInfo, net *types.NetworkSelectionElemen
 		}
 	}
 
+	//validate CNI args
+	err = validateCNIArgs(customResource, net.CNIArgs)
+	if err != nil {
+		return nil, resourceMap, err
+	}
+
 	configBytes, err := netutils.GetCNIConfig(customResource, confdir)
 	if err != nil {
 		return nil, resourceMap, err
@@ -585,4 +591,41 @@ func tryLoadK8sPodDefaultNetwork(kubeClient *ClientInfo, pod *v1.Pod, conf *type
 	delegate.MasterPlugin = true
 
 	return delegate, nil
+}
+
+// validateCNIArgs validates the CNI args in NetworkSelectionElement with filters
+func validateCNIArgs(customResource *nettypes.NetworkAttachmentDefinition, cniArgs *map[string]interface{}) error {
+	filterDeny, denyOK := customResource.GetAnnotations()["v1.multus-cni.io/arg-filter-deny"]
+	filterAllow, allowOK := customResource.GetAnnotations()["v1.multus-cni.io/arg-filter-allow"]
+	if denyOK {
+		if allowOK {
+			return logging.Errorf("arg-filter-allow and arg-filter-deny are exclusive, but both configured")
+		}
+
+		for argName := range *cniArgs {
+			for _, keyword := range strings.Split(filterDeny, ",") {
+				keyword = strings.TrimSpace(keyword)
+				if keyword == argName {
+					return logging.Errorf("arg-filter-deny: %s is in the list: %v", argName, filterDeny)
+				}
+			}
+		}
+	}
+
+	if allowOK {
+		for argName := range *cniArgs {
+			exists := false
+			for _, keyword := range strings.Split(filterAllow, ",") {
+				keyword = strings.TrimSpace(keyword)
+
+				if keyword == argName {
+					exists = true
+				}
+			}
+			if exists == false {
+				return logging.Errorf("arg-filter-allow: %s is not in the list: %v", argName, filterAllow)
+			}
+		}
+	}
+	return nil
 }

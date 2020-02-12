@@ -275,3 +275,137 @@ annotations:
  v1.multus-cni.io/default-network: calico-conf
 ...
 ```
+
+# CNI Args passing by the pod annotations
+
+Multus supports `cni-args` in `k8s.v1.cni.cncf.io/networks` to inject additional CNI config through [CNI Args](https://github.com/containernetworking/cni/blob/master/CONVENTIONS.md#args-in-network-config).
+
+```
+---
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: centos-args-def
+spec:
+  config: '{
+            "cniVersion": "0.3.1",
+            "plugins": [
+                {
+                    "type": "macvlan",
+                    "capabilities": { "ips": true },
+                    "master": "eth1",
+                    "mode": "bridge",
+                    "ipam": {
+                        "type": "static"
+                    }
+                }, {
+                    "type": "route-override"
+                } ]
+        }'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: centos-args
+  annotations:
+    k8s.v1.cni.cncf.io/networks: '[
+            { "name": "centos-args-def",
+              "ips": [ "10.1.1.102/24" ],
+              "cni-args": {
+                  "addroutes": [ {
+                      "dst": "192.168.0.0/24",
+                      "gw": "10.1.1.254"
+                  } ]
+              }
+            }
+    ]'
+spec:
+  containers:
+  - name: centos-args
+    image: docker.io/centos/tools:latest
+    command:
+    - /sbin/init
+```
+
+In this case, pod network config will be following. "addroutes" is injected for each plugins in a plugin chain.
+
+```
+{
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "macvlan",
+      "capabilities": {
+        "ips": true
+      },
+      "master": "eth1",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static"
+      },
+      "args": {
+        "cni": {
+          "addroutes": [
+            {
+              "dst": "192.168.0.0/24",
+              "gw": "10.1.1.254"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "route-override",
+      "args": {
+        "cni": {
+          "addroutes": [
+            {
+              "dst": "192.168.0.0/24",
+              "gw": "10.1.1.254"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+## Filtering CNI Args passing by the NetworkAttachmentDefinition annotation
+
+Multus CNI also supports filtering CNI args from Pod annotations (i.e. `k8s.v1.cni.cncf.io/networks`) by NetworkAttachmentDefinition annotation.
+
+The following configuration only allows `addroutes` in 'cni-args'. Pod creation is failed if pod has other CNI arg in `cni-args` other than `addroutes`.
+
+```
+---
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: centos-args-def
+  annotations:
+    v1.multus-cni.io/arg-filter-allow: addroutes
+spec:
+  config: '{
+            "cniVersion": "0.3.1",
+            "plugins": [
+                {
+                    "type": "macvlan",
+                    "capabilities": { "ips": true },
+                    "master": "eth1",
+                    "mode": "bridge",
+                    "ipam": {
+                        "type": "static"
+                    }
+                }, {
+                    "type": "route-override"
+                } ]
+        }'
+```
+
+### Filtering CNI Args annotations
+
+`v1.multus-cni.io/arg-filter-allow` and `v1.multus-cni.io/arg-filter-deny` are exclusive, so user can config only one in annotations.
+
+* `v1.multus-cni.io/arg-filter-allow` (string, required): CNI arg name list to be passed, separated by comma
+* `v1.multus-cni.io/arg-filter-deny` (string, required): CNI arg name list to be denied, separated by comma 

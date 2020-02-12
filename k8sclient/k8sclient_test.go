@@ -16,6 +16,7 @@
 package k8sclient
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -24,6 +25,8 @@ import (
 
 	types020 "github.com/containernetworking/cni/pkg/types/020"
 	testutils "github.com/intel/multus-cni/testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/intel/multus-cni/types"
@@ -1419,6 +1422,128 @@ users:
 			Expect(err).NotTo(HaveOccurred())
 
 			err = SetNetworkStatus(nil, k8sArgs, netstatus, netConf)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("CNI args flitering", func() {
+		It("Pass everything with no config", func() {
+			var args map[string]interface{}
+			netAttachDef := &nettypes.NetworkAttachmentDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sampleNetAttachDef",
+					Namespace: "testNamespace",
+				},
+			}
+			cniArgs := `{
+				"args1": "val1"
+			}`
+			err := json.Unmarshal([]byte(cniArgs), &args)
+			Expect(err).NotTo(HaveOccurred())
+			err = validateCNIArgs(netAttachDef, &args)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Deny with empty allow", func() {
+			var args map[string]interface{}
+			netAttachDef := &nettypes.NetworkAttachmentDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sampleNetAttachDef",
+					Namespace: "testNamespace",
+					Annotations: map[string]string{
+						"v1.multus-cni.io/arg-filter-allow": "",
+					},
+				},
+			}
+			cniArgs := `{
+				"args1": "val1"
+			}`
+			err := json.Unmarshal([]byte(cniArgs), &args)
+			Expect(err).NotTo(HaveOccurred())
+			err = validateCNIArgs(netAttachDef, &args)
+			Expect(err).To(HaveOccurred())
+		})
+
+		//allow if no cni args with empty allow
+		It("Allow no cni args with empty allow", func() {
+			var args map[string]interface{}
+			netAttachDef := &nettypes.NetworkAttachmentDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sampleNetAttachDef",
+					Namespace: "testNamespace",
+					Annotations: map[string]string{
+						"v1.multus-cni.io/arg-filter-allow": "",
+					},
+				},
+			}
+			cniArgs := `{
+			}`
+			err := json.Unmarshal([]byte(cniArgs), &args)
+			Expect(err).NotTo(HaveOccurred())
+			err = validateCNIArgs(netAttachDef, &args)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		//allow if with deny with keywords
+		It("Allow with deny keyword (args not in keyword list)", func() {
+			var args map[string]interface{}
+			netAttachDef := &nettypes.NetworkAttachmentDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sampleNetAttachDef",
+					Namespace: "testNamespace",
+					Annotations: map[string]string{
+						"v1.multus-cni.io/arg-filter-deny": "foobar,barfoo",
+					},
+				},
+			}
+			cniArgs := `{
+				"args1": "val1"
+			}`
+			err := json.Unmarshal([]byte(cniArgs), &args)
+			Expect(err).NotTo(HaveOccurred())
+			err = validateCNIArgs(netAttachDef, &args)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		//deny if with deny with keywords, that is not in its list
+		It("Deny with deny keyword (args in keyword list)", func() {
+			var args map[string]interface{}
+			netAttachDef := &nettypes.NetworkAttachmentDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sampleNetAttachDef",
+					Namespace: "testNamespace",
+					Annotations: map[string]string{
+						"v1.multus-cni.io/arg-filter-deny": "foobar,args1",
+					},
+				},
+			}
+			cniArgs := `{
+				"args1": "val1"
+			}`
+			err := json.Unmarshal([]byte(cniArgs), &args)
+			Expect(err).NotTo(HaveOccurred())
+			err = validateCNIArgs(netAttachDef, &args)
+			Expect(err).To(HaveOccurred())
+		})
+
+		//allow if with empty deny
+		It("Allow with empty deny list", func() {
+			var args map[string]interface{}
+			netAttachDef := &nettypes.NetworkAttachmentDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sampleNetAttachDef",
+					Namespace: "testNamespace",
+					Annotations: map[string]string{
+						"v1.multus-cni.io/arg-filter-deny": "",
+					},
+				},
+			}
+			cniArgs := `{
+				"args1": "val1"
+			}`
+			err := json.Unmarshal([]byte(cniArgs), &args)
+			Expect(err).NotTo(HaveOccurred())
+			err = validateCNIArgs(netAttachDef, &args)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
