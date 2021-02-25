@@ -423,7 +423,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netConf.Delegates)).To(Equal(1))
 		Expect(netConf.Delegates[0].Conf.Name).To(Equal("myCRD1"))
@@ -459,11 +459,51 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
+		Expect(err).NotTo(HaveOccurred())
 		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netConf.Delegates)).To(Equal(2))
 		Expect(netConf.Delegates[0].Conf.Name).To(Equal("myCRD1"))
 		Expect(netConf.Delegates[0].Conf.Type).To(Equal("mynet"))
+		Expect(netConf.Delegates[1].Conf.Name).To(Equal("myCRD2"))
+		Expect(netConf.Delegates[1].Conf.Type).To(Equal("mynet2"))
+	})
+
+	It("retrieves default networks from CRD with delegates", func() {
+		fakePod := testutils.NewFakePod("testpod", "", "")
+		conf := `{
+			"name":"node-cni-network",
+			"type":"multus",
+			"defaultNetworks": ["myCRD2"],
+			"kubeconfig":"/etc/kubernetes/node-kubeconfig.yaml",
+			"delegates": [{
+				"type": "mynet1",
+				"name": "net1"
+			}]
+		}`
+		netConf, err := types.LoadNetConf([]byte(conf))
+		Expect(err).NotTo(HaveOccurred())
+
+		args := &skel.CmdArgs{
+			Args: fmt.Sprintf("K8S_POD_NAME=%s;K8S_POD_NAMESPACE=%s", fakePod.ObjectMeta.Name, fakePod.ObjectMeta.Namespace),
+		}
+
+		clientInfo := NewFakeClientInfo()
+		_, err = clientInfo.AddPod(fakePod)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = clientInfo.AddNetAttachDef(
+			testutils.NewFakeNetAttachDef("kube-system", "myCRD2", "{\"type\": \"mynet2\"}"))
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = GetK8sArgs(args)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(netConf.Delegates)).To(Equal(2))
+		Expect(netConf.Delegates[0].Conf.Name).To(Equal("net1"))
+		Expect(netConf.Delegates[0].Conf.Type).To(Equal("mynet1"))
 		Expect(netConf.Delegates[1].Conf.Name).To(Equal("myCRD2"))
 		Expect(netConf.Delegates[1].Conf.Type).To(Equal("mynet2"))
 	})
@@ -499,7 +539,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netConf.Delegates)).To(Equal(1))
 		Expect(netConf.Delegates[0].Conf.Name).To(Equal("myCRD1"))
@@ -538,7 +578,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netConf.Delegates)).To(Equal(1))
 		Expect(netConf.Delegates[0].Conf.Name).To(Equal("myFile1"))
@@ -574,7 +614,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netConf.Delegates)).To(Equal(1))
 		Expect(netConf.Delegates[0].Conf.Name).To(Equal("net1"))
@@ -603,7 +643,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -636,7 +676,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netConf.Delegates)).To(Equal(1))
 		Expect(netConf.Delegates[0].Conf.Name).To(Equal("net2"))
@@ -676,7 +716,7 @@ var _ = Describe("k8sclient operations", func() {
 		_, err = GetK8sArgs(args)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+		_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 		Expect(err).To(HaveOccurred())
 
 		netConf.ConfDir = "badfilepath"
@@ -985,7 +1025,7 @@ users:
 			Expect(err).NotTo(HaveOccurred())
 
 			netConf.ConfDir = "garbage value"
-			_, err = GetDefaultNetworks(fakePod, netConf, clientInfo, nil)
+			_, err = GetClusterNetwork(fakePod, netConf, clientInfo, nil)
 			Expect(err).To(HaveOccurred())
 		})
 	})
