@@ -40,11 +40,13 @@ EOF
 # load multus image from container host to kind node
 kind load docker-image localhost:5000/multus:e2e
 
+controller_pid=$($OCI_BIN inspect --format "{{ .State.Pid }}" kind-control-plane)
 worker1_pid=$($OCI_BIN inspect --format "{{ .State.Pid }}" kind-worker)
 worker2_pid=$($OCI_BIN inspect --format "{{ .State.Pid }}" kind-worker2)
 
 kind export kubeconfig
 sudo env PATH=${PATH} koko -p "$worker1_pid,eth1" -p "$worker2_pid,eth1"
+sudo env PATH=${PATH} koko -p "$controller_pid,eth1" -p "$worker1_pid,eth2"
 sleep 1
 kubectl -n kube-system wait --for=condition=available deploy/coredns --timeout=300s
 kubectl create -f yamls/$MULTUS_MANIFEST
